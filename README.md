@@ -1,6 +1,6 @@
 # IsleBloom: Island Plant Competition Simulator
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Click_to_Play-brightgreen?style=for-the-badge&logo=github)](https://lirun478.github.io/IsleBloom/)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Click_to_Play-brightgreen?logo=github)](https://lirun478.github.io/IsleBloom/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19437084.svg)](https://doi.org/10.5281/zenodo.19437084)
 
 ## Overview
