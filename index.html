@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IsleBloom: 岛屿植物竞争观察</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #0f172a;
+      color: #e5e7eb;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    canvas { display: block; cursor: crosshair; }
+    .panel {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      width: 320px;
+      background: rgba(17, 24, 39, 0.95);
+      border: 1px solid #374151;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      z-index: 20;
+      overflow: hidden;
+    }
+    .panel.minimized .panel-content { display: none; }
+    #simPanel { display: none; width: 300px; }
+    .panel-header {
+      padding: 10px 14px;
+      background: rgba(31, 41, 55, 0.9);
+      border-bottom: 1px solid #374151;
+      font-weight: 700;
+      cursor: move;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    .panel-minimize {
+      background: transparent; border: none; color: #9ca3af;
+      font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1;
+    }
+    .panel-minimize:hover { color: #fff; }
+    .panel-content {
+      padding: 14px;
+      max-height: calc(100vh - 90px);
+      overflow-y: auto;
+    }
+    .field-label {
+      display: block; font-size: 12px; color: #9ca3af;
+      margin-bottom: 6px; font-weight: 600;
+    }
+    .input {
+      width: 100%;
+      background: #111827; border: 1px solid #4b5563;
+      color: #f9fafb; border-radius: 6px;
+      padding: 6px 8px; font-size: 12px; outline: none;
+    }
+    .input:focus { border-color: #60a5fa; }
+    .tooltip {
+      position: absolute; z-index: 40;
+      background: rgba(2, 6, 23, 0.95);
+      border: 1px solid #475569; border-radius: 8px;
+      font-size: 12px; padding: 10px;
+      pointer-events: none; min-width: 240px; display: none;
+    }
+    .legend-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      display: inline-block; margin-right: 8px;
+    }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #111827; }
+    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 999px; }
+    .habitat-btn {
+      padding: 4px 10px; border-radius: 4px; font-size: 11px;
+      cursor: pointer; border: 2px solid #4b5563;
+      background: #1f2937; color: #9ca3af; transition: all 0.15s;
+    }
+    .habitat-btn.active {
+      border-color: #60a5fa; background: #1e3a5f; color: #93c5fd;
+    }
+    .species-card {
+      border: 1px solid #374151; border-radius: 8px;
+      padding: 8px 10px; background: rgba(31, 41, 55, 0.5);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .color-dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.3); flex-shrink: 0;
+    }
+    @keyframes gradient-shift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .animate-gradient {
+      animation: gradient-shift 4s ease infinite;
+    }
+    /* Language Toggle Classes */
+    body.lang-en .lang-zh { display: none !important; }
+    body.lang-zh .lang-en { display: none !important; }
+    
+    .lang-zh { display: inline-block; }
+    .lang-en { display: inline-block; }
+  </style>
+</head>
+<body class="lang-zh">
+  <!-- 首页 -->
+  <div id="homeScreen" class="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-[#0f172a]/80 backdrop-blur-sm transition-opacity duration-500">
+    <h1 class="text-[5rem] md:text-[8rem] font-black mb-6 tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-500 to-pink-500 animate-gradient bg-[length:200%_auto] select-none drop-shadow-[0_0_20px_rgba(168,85,247,0.5)]">
+      IsleBloom
+    </h1>
+    
+    <!-- Language Selection -->
+    <div class="flex gap-4 mb-10 bg-black/40 p-2 rounded-full border border-white/10 backdrop-blur-md">
+      <button id="langSelectZh" class="px-6 py-2 rounded-full bg-blue-600 text-white text-sm font-bold shadow-lg transition-all">中文</button>
+      <button id="langSelectEn" class="px-6 py-2 rounded-full bg-transparent hover:bg-white/10 text-gray-300 text-sm font-bold transition-all">English</button>
+    </div>
+
+    <button id="btnEnterEditor" class="px-16 py-5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white text-2xl font-bold tracking-[0.25em] shadow-[0_0_30px_rgba(168,85,247,0.3)] transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md">
+      START
+    </button>
+    <button id="btnIntro" class="mt-8 bg-indigo-600/80 hover:bg-indigo-500/80 backdrop-blur-md text-white text-sm px-6 py-2.5 rounded-full cursor-pointer font-semibold flex items-center justify-center gap-2 border border-indigo-400/30 transition-all hover:scale-105 shadow-lg">📖 <span class="lang-zh">介绍与说明</span><span class="lang-en">Intro & Instructions</span></button>
+  </div>
+
+  <div id="editorPanel" class="panel" style="display: none;">
+    <div class="panel-header text-blue-300" id="editorPanelHeader">
+      <span><span class="lang-zh">岛屿编辑器</span><span class="lang-en">Island Editor</span> - IsleBloom</span>
+      <button class="panel-minimize" id="editorMinimize">−</button>
+    </div>
+    <div class="panel-content space-y-4">
+      <!-- 地图尺寸 -->
+      <div class="border-b border-gray-700 pb-3">
+        <label class="field-label"><span class="lang-zh">地图尺寸 (单位格)</span><span class="lang-en">Map Size (Grid Units)</span></label>
+        <div class="flex gap-2 mb-2">
+          <input id="mapW" type="number" min="60" max="220" value="120" class="input" />
+          <input id="mapH" type="number" min="60" max="220" value="90" class="input" />
+        </div>
+        <button id="btnResize" class="w-full bg-blue-700 hover:bg-blue-600 text-white text-xs py-2 rounded cursor-pointer"><span class="lang-zh">应用尺寸 (重置地图)</span><span class="lang-en">Apply Size (Reset Map)</span></button>
+      </div>
+
+      <!-- 地形画笔 -->
+      <div class="border-b border-gray-700 pb-3">
+        <label class="field-label"><span class="lang-zh">地形画笔</span><span class="lang-en">Terrain Brush</span></label>
+        <div class="grid grid-cols-2 gap-2 text-xs" id="terrainBrushes">
+          <button class="brush-btn bg-[#3b82f6] text-white rounded py-2 ring-2 ring-white" data-terrain="0"><span class="lang-zh">水域</span><span class="lang-en">Water</span></button>
+          <button class="brush-btn bg-[#fde047] text-black rounded py-2" data-terrain="1"><span class="lang-zh">沙滩</span><span class="lang-en">Beach</span></button>
+          <button class="brush-btn bg-[#65a30d] text-white rounded py-2" data-terrain="2"><span class="lang-zh">草地</span><span class="lang-en">Grass</span></button>
+          <button class="brush-btn bg-[#14532d] text-white rounded py-2" data-terrain="3"><span class="lang-zh">森林</span><span class="lang-en">Forest</span></button>
+        </div>
+        <div id="plantBrushes" class="grid grid-cols-2 gap-2 text-xs mt-2"></div>
+        <div class="mt-3">
+          <label class="field-label"><span class="lang-zh">画笔大小:</span><span class="lang-en">Brush Size:</span> <span id="brushSizeText">3</span></label>
+          <input id="brushSize" type="range" min="1" max="8" value="3" class="w-full accent-blue-500 cursor-pointer" />
+        </div>
+      </div>
+
+      <!-- 植物种类管理 -->
+      <div class="border-b border-gray-700 pb-3">
+        <label class="field-label"><span class="lang-zh">植物种类管理</span><span class="lang-en">Plant Species Management</span></label>
+        <div id="speciesListContainer" class="space-y-2 mb-2"></div>
+        <button id="btnAddSpecies" class="w-full bg-emerald-700 hover:bg-emerald-600 text-white text-xs py-2 rounded cursor-pointer font-semibold">➕ <span class="lang-zh">增加新植物</span><span class="lang-en">Add New Plant</span></button>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="space-y-2">
+        <button id="btnRandom" class="w-full bg-purple-700 hover:bg-purple-600 text-white text-sm py-2 rounded cursor-pointer"><span class="lang-zh">随机生成岛屿</span><span class="lang-en">Random Island</span></button>
+        <button id="btnClear" class="w-full bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded cursor-pointer"><span class="lang-zh">清空为海洋</span><span class="lang-en">Clear to Ocean</span></button>
+        <button id="btnClearPlants" class="w-full bg-amber-700 hover:bg-amber-600 text-white text-sm py-2 rounded cursor-pointer">🌱 <span class="lang-zh">一键删除所有植物</span><span class="lang-en">Delete All Plants</span></button>
+        <button id="btnStart" class="w-full bg-green-700 hover:bg-green-600 text-white text-base font-bold py-3 rounded cursor-pointer"><span class="lang-zh">开始模拟</span><span class="lang-en">Start Simulation</span></button>
+        <button id="btnHome" class="w-full bg-slate-700 hover:bg-slate-600 border border-slate-500 text-white text-sm py-2 rounded cursor-pointer">🏠 <span class="lang-zh">返回首页</span><span class="lang-en">Return to Home</span></button>
+      </div>
+      <p class="text-xs text-gray-400"><span class="lang-zh">左键拖拽绘制地形/放置植物。滚轮缩放。</span><span class="lang-en">Left-click drag to draw/place. Scroll to zoom.</span></p>
+    </div>
+  </div>
+
+  <!-- 模拟面板 -->
+  <div id="simPanel" class="panel">
+    <div class="panel-header text-green-300" id="simPanelHeader">
+      <span><span class="lang-zh">模拟观测面板</span><span class="lang-en">Simulation Panel</span></span>
+      <button class="panel-minimize" id="simMinimize">−</button>
+    </div>
+    <div class="panel-content space-y-3 text-sm">
+      <div class="flex justify-between"><span><span class="lang-zh">当前轮次</span><span class="lang-en">Current Round</span></span><span id="roundText" class="font-bold text-cyan-300">0</span></div>
+      <div id="simSpeciesStats"></div>
+      <div class="flex justify-between"><span><span class="lang-zh">缩放倍率</span><span class="lang-en">Zoom Level</span></span><span id="zoomText" class="font-bold text-blue-300">1.00x</span></div>
+      <div>
+        <label class="field-label"><span class="lang-zh">每轮时长 (秒)</span><span class="lang-en">Round Duration (s)</span></label>
+        <input id="roundDuration" type="range" min="0.4" max="3" value="1" step="0.1" class="w-full accent-green-500 cursor-pointer" />
+      </div>
+      <div class="flex gap-2">
+        <button id="btnPause" class="flex-1 bg-blue-700 hover:bg-blue-600 text-white text-xs py-2 rounded cursor-pointer"><span class="lang-zh">暂停</span><span class="lang-en">Pause</span></button>
+        <button id="btnZoomIn" class="flex-1 bg-indigo-700 hover:bg-indigo-600 text-white text-xs py-2 rounded cursor-pointer"><span class="lang-zh">放大 +</span><span class="lang-en">Zoom In +</span></button>
+        <button id="btnZoomOut" class="flex-1 bg-indigo-700 hover:bg-indigo-600 text-white text-xs py-2 rounded cursor-pointer"><span class="lang-zh">缩小 -</span><span class="lang-en">Zoom Out -</span></button>
+      </div>
+      <button id="btnBack" class="w-full bg-red-700 hover:bg-red-600 text-white text-xs py-2 rounded cursor-pointer"><span class="lang-zh">返回编辑模式</span><span class="lang-en">Back to Editor</span></button>
+      <div id="simLegend" class="pt-2 border-t border-gray-700 text-xs text-gray-300"></div>
+      <button id="btnChart" class="w-full bg-purple-700 hover:bg-purple-600 text-white text-xs py-2 rounded cursor-pointer mt-2">📊 <span class="lang-zh">统计图表</span><span class="lang-en">Statistics Chart</span></button>
+    </div>
+  </div>
+
+  <!-- 统计图表模态框 -->
+  <div id="chartModal" class="hidden absolute inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div class="bg-gray-900 p-4 rounded-lg w-[90%] h-[80%] relative border border-gray-700 flex flex-col">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="text-orange-400 font-bold"><span class="lang-zh">植物数量变化统计</span><span class="lang-en">Population Change Statistics</span></h2>
+        <button id="closeChart" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-sm cursor-pointer"><span class="lang-zh">关闭</span><span class="lang-en">Close</span></button>
+      </div>
+      <div class="flex-1 relative w-full h-full">
+        <canvas id="popChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通用植物参数设置模态框 -->
+  <div id="speciesConfigModal" class="hidden absolute inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div class="bg-gray-900 rounded-lg w-[500px] max-h-[88vh] border border-gray-600 flex flex-col shadow-2xl" id="speciesConfigInner">
+      <div class="flex justify-between items-center p-4 border-b border-gray-700" id="speciesConfigHeader">
+        <h2 class="font-bold text-lg" id="speciesConfigTitle">🌿 植物参数设置</h2>
+        <button id="closeSpeciesConfig" class="bg-gray-700 hover:bg-gray-600 text-white w-8 h-8 rounded-full text-sm cursor-pointer flex items-center justify-center">✕</button>
+      </div>
+      <div class="p-5 overflow-y-auto space-y-4" id="speciesConfigBody">
+        <!-- 基本参数 -->
+        <div class="border border-gray-700 rounded-lg p-3 bg-gray-800/50">
+          <h3 class="text-yellow-300 font-bold text-sm mb-3 flex items-center gap-2">
+            <span class="w-2 h-2 bg-yellow-400 rounded-full"></span><span class="lang-zh">基本参数</span><span class="lang-en">Basic Parameters</span>
+          </h3>
+          <div class="space-y-2.5">
+            <div>
+              <label class="field-label"><span class="lang-zh">植物名称</span><span class="lang-en">Plant Name</span></label>
+              <input id="cfgName" type="text" maxlength="20" class="input" />
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">颜色</span><span class="lang-en">Color</span></label>
+              <input id="cfgColor" type="color" class="input h-9 p-1 cursor-pointer" />
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">生存环境 (可多选)</span><span class="lang-en">Habitat (Multi-select)</span></label>
+              <div class="flex gap-2 flex-wrap" id="cfgHabitatGroup">
+                <button type="button" class="habitat-btn" data-terrain="0">🌊 <span class="lang-zh">水域</span><span class="lang-en">Water</span></button>
+                <button type="button" class="habitat-btn" data-terrain="1">🏖 <span class="lang-zh">沙滩</span><span class="lang-en">Beach</span></button>
+                <button type="button" class="habitat-btn active" data-terrain="2">🌿 <span class="lang-zh">草地</span><span class="lang-en">Grass</span></button>
+                <button type="button" class="habitat-btn" data-terrain="3">🌲 <span class="lang-zh">森林</span><span class="lang-en">Forest</span></button>
+              </div>
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">生存寿命 (轮)</span><span class="lang-en">Lifespan (Rounds)</span></label>
+              <input id="cfgLifespan" type="number" min="1" max="50" value="3" class="input" />
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">幼苗时期 (轮)</span><span class="lang-en">Juvenile Period (Rounds)</span></label>
+              <input id="cfgJuvenile" type="number" min="0" max="50" value="1" class="input" />
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">初始植物数量</span><span class="lang-en">Initial Population</span></label>
+              <input id="cfgInitial" type="number" min="0" max="2000" value="80" class="input" />
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">变异指数 (%)</span><span class="lang-en">Mutation Rate (%)</span></label>
+              <input id="cfgMutation" type="number" min="0" max="100" value="20" class="input" />
+            </div>
+          </div>
+        </div>
+        <!-- 繁殖参数 -->
+        <div class="border border-gray-700 rounded-lg p-3 bg-gray-800/50">
+          <h3 class="text-green-300 font-bold text-sm mb-3 flex items-center gap-2">
+            <span class="w-2 h-2 bg-green-400 rounded-full"></span><span class="lang-zh">繁殖参数</span><span class="lang-en">Reproduction Parameters</span>
+          </h3>
+          <div class="space-y-2.5">
+            <div>
+              <label class="field-label"><span class="lang-zh">传粉范围 (半径单位)</span><span class="lang-en">Pollination Range (Radius)</span></label>
+              <input id="cfgPollination" type="number" min="1" max="50" value="4" class="input" />
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">种子数量</span><span class="lang-en">Seed Count</span></label>
+              <input id="cfgSeedCount" type="number" min="1" max="50" value="4" class="input" />
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">种子传播范围 (半径单位)</span><span class="lang-en">Seed Range (Radius)</span></label>
+              <input id="cfgSeedRange" type="number" min="1" max="60" value="5" class="input" />
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">种子存活率 (%)</span><span class="lang-en">Seed Survival Rate (%)</span></label>
+              <input id="cfgSeedSurvival" type="number" min="0" max="100" value="70" class="input" />
+            </div>
+          </div>
+        </div>
+        <!-- 竞争参数 -->
+        <div class="border border-gray-700 rounded-lg p-3 bg-gray-800/50">
+          <h3 class="text-red-300 font-bold text-sm mb-3 flex items-center gap-2">
+            <span class="w-2 h-2 bg-red-400 rounded-full"></span><span class="lang-zh">竞争参数</span><span class="lang-en">Competition Parameters</span>
+          </h3>
+          <div class="space-y-2.5">
+            <div>
+              <label class="field-label"><span class="lang-zh">种内竞争范围 (半径单位)</span><span class="lang-en">Intra-specific Comp Range (Radius)</span></label>
+              <input id="cfgIntraCompRange" type="number" min="0" max="60" value="6" class="input" />
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">种内竞争能力 (%)</span><span class="lang-en">Intra-specific Comp Ability (%)</span></label>
+              <input id="cfgIntraCompAbility" type="number" min="0" max="100" value="20" class="input" />
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">种间竞争范围 (半径单位)</span><span class="lang-en">Inter-specific Comp Range (Radius)</span></label>
+              <input id="cfgInterCompRange" type="number" min="0" max="60" value="5" class="input" />
+            </div>
+            <div>
+              <label class="field-label"><span class="lang-zh">种间竞争能力 (%)</span><span class="lang-en">Inter-specific Comp Ability (%)</span></label>
+              <input id="cfgInterCompAbility" type="number" min="0" max="100" value="15" class="input" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="p-4 border-t border-gray-700 bg-gray-800/30 flex gap-2">
+        <button id="saveSpeciesConfig" class="flex-1 bg-green-600 hover:bg-green-500 text-white py-2.5 rounded font-semibold cursor-pointer"><span class="lang-zh">保存设置</span><span class="lang-en">Save Settings</span></button>
+        <button id="deleteSpeciesConfig" class="px-4 bg-red-700 hover:bg-red-600 text-white py-2.5 rounded cursor-pointer text-sm"><span class="lang-zh">删除此植物</span><span class="lang-en">Delete Plant</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 介绍与说明模态框 -->
+  <div id="introModal" class="hidden absolute inset-0 bg-black/80 flex items-center justify-center z-[150]">
+    <div class="bg-gray-900 rounded-lg w-[700px] max-h-[85vh] border border-gray-600 flex flex-col shadow-2xl">
+      <div class="flex justify-between items-center p-4 border-b border-gray-700">
+        <h2 class="font-bold text-lg text-indigo-300 flex items-center gap-2">📖 介绍与说明 / Intro & Instructions</h2>
+        <div class="flex gap-2">
+          <button id="btnIntroZh" class="px-3 py-1 rounded bg-indigo-700 hover:bg-indigo-600 text-xs font-semibold cursor-pointer text-white">🇨🇳 中文</button>
+          <button id="btnIntroEn" class="px-3 py-1 rounded bg-gray-700 hover:bg-indigo-600 text-xs font-semibold cursor-pointer text-gray-300">🇺🇸 English</button>
+          <button id="closeIntro" class="bg-gray-700 hover:bg-gray-600 text-white w-8 h-8 rounded-full text-sm cursor-pointer flex items-center justify-center ml-2">✕</button>
+        </div>
+      </div>
+      
+      <!-- 中文版内容 -->
+      <div id="introContentZh" class="p-6 overflow-y-auto space-y-4 text-sm text-gray-300 leading-relaxed">
+        <h1 class="text-xl font-bold text-white border-b border-indigo-500/30 pb-2">IsleBloom: 岛屿植物竞争观察</h1>
+        <p>IsleBloom 是一款交互式生态模拟网页应用，旨在通过直观的可视化方式，帮助用户理解和探索植物种群在有限岛屿环境下的生存、繁殖与竞争动态。</p>
+        <p>它以简化的生态学模型为基础，融合了生存环境适应、生命周期、繁殖扩散、种内与种间竞争以及遗传变异等核心机制，让用户能够亲手设计岛屿生态系统，并观察不同植物物种如何在资源有限的空间中竞争共存或走向消亡。</p>
+        
+        <h2 class="text-base font-bold text-indigo-300 mt-4">1. 模型核心理念</h2>
+        <ul class="list-disc pl-5 space-y-1">
+          <li><strong>岛屿生态系统：</strong>模拟一个孤立的岛屿，地形分为四种主要栖息地：水域、沙滩、草地、森林。不同植物对栖息地有特定的适应性，只有在适宜的环境中才能存活和繁殖。</li>
+          <li><strong>“适者生存”原则：</strong>每种植物都有独特的生存策略。通过调整参数，用户可以观察哪些物种会在竞争中占据优势，哪些会逐渐被淘汰。</li>
+          <li><strong>动态演化过程：</strong>模拟不是静态的，而是随着轮次推进，植物种群数量、空间分布和个体特性都会发生真实的变化，最终形成稳定的生态格局或剧烈的种群波动。</li>
+        </ul>
+
+        <h2 class="text-base font-bold text-indigo-300 mt-4">2. 主要功能与玩法</h2>
+        <p class="font-semibold text-white">（1）岛屿编辑器</p>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>自由绘制岛屿地形：使用不同画笔绘制水域、沙滩、草地和森林，塑造岛屿的地理环境。</li>
+          <li>自定义植物种类：可以添加多种植物，每种植物可独立设置名称、颜色、适宜生存的环境类型。</li>
+          <li>手动放置初始植物：在适宜地形上直接点击放置特定植物个体。</li>
+          <li>一键随机生成岛屿或清空地图，快速开始实验。</li>
+        </ul>
+
+        <p class="font-semibold text-white mt-2">（2）植物参数系统</p>
+        <p>每种植物都拥有丰富的可调节参数，分为三大类：</p>
+        <div class="bg-gray-800/50 p-3 rounded border border-gray-700">
+          <p class="font-semibold text-yellow-300">基本参数</p>
+          <ul class="list-disc pl-5 text-xs text-gray-400">
+            <li>植物名称与显示颜色</li>
+            <li>生存环境（可多选：水域、沙滩、草地、森林）</li>
+            <li>生存寿命（轮）：个体从出生到自然死亡的轮次</li>
+            <li>幼苗时期（轮）：幼苗无法繁殖的保护期</li>
+            <li>初始植物数量：模拟开始时自动补充的初始个体数</li>
+            <li>变异指数（%）：新繁殖个体参数偏离亲代的程度</li>
+          </ul>
+        </div>
+        <div class="bg-gray-800/50 p-3 rounded border border-gray-700">
+          <p class="font-semibold text-green-300">繁殖参数</p>
+          <ul class="list-disc pl-5 text-xs text-gray-400">
+            <li>传粉范围（半径单位）：需要同种其他成熟个体在该范围内才能成功传粉</li>
+            <li>种子数量：每次繁殖产生的种子数（受竞争影响）</li>
+            <li>种子传播范围（半径单位）：种子可散布的距离</li>
+            <li>种子存活率（%）：概率判定种子成功发芽并成长为新个体</li>
+          </ul>
+        </div>
+        <div class="bg-gray-800/50 p-3 rounded border border-gray-700">
+          <p class="font-semibold text-red-300">竞争参数</p>
+          <ul class="list-disc pl-5 text-xs text-gray-400">
+            <li>种内竞争范围 & 竞争能力：同种个体之间的资源争夺强度</li>
+            <li>种间竞争范围 & 竞争能力：不同物种之间的资源争夺强度</li>
+          </ul>
+        </div>
+        <p class="text-xs text-indigo-200 bg-indigo-900/40 p-2 rounded">竞争会显著降低植物的繁殖效率（有效传粉范围、种子数量、种子存活率等都会下降），体现了生态学中“密度制约”和“资源竞争”的真实机制。</p>
+
+        <h2 class="text-base font-bold text-indigo-300 mt-4">3. 模拟运行机制</h2>
+        <p>当点击“开始模拟”后，系统进入观测模式：</p>
+        <ul class="list-disc pl-5 space-y-1">
+          <li><strong>生命周期：</strong>每个个体每轮都会增长年龄，达到寿命上限后自然死亡。</li>
+          <li><strong>繁殖过程：</strong>只有超过幼苗期的成熟个体才能尝试繁殖。必须在传粉范围内存在至少一个同种其他成熟个体才能成功传粉。成功后产生一定数量的种子，种子随机散布到周围适宜栖息地。种子需通过存活率判定才能成长为新个体。</li>
+          <li><strong>竞争影响：</strong>繁殖时会计算周围同种和异种个体的竞争压力，竞争越激烈，繁殖成功率越低。</li>
+          <li><strong>变异机制：</strong>每个新诞生的个体，其各项参数都会在亲代基础上根据变异指数发生小幅随机波动，模拟遗传多样性。</li>
+          <li><strong>空间限制：</strong>同一格子只能容纳一个植物个体，避免无限堆叠。</li>
+        </ul>
+        <p class="mt-2 font-semibold text-white">模拟过程中你可以：</p>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>实时查看每种植物的当前存活数量</li>
+          <li>暂停后悬停查看单个植物的详细个体参数（年龄、繁殖状态、竞争效率等）</li>
+          <li>查看种群数量随轮次变化的折线统计图表</li>
+        </ul>
+
+        <h2 class="text-base font-bold text-indigo-300 mt-4">4. 操作提示</h2>
+        <ul class="list-disc pl-5 space-y-1">
+          <li><strong>左键拖拽：</strong>在编辑模式下绘制地形或放置植物</li>
+          <li><strong>滚轮：</strong>缩放地图视图</li>
+          <li><strong>面板拖拽：</strong>所有控制面板均可自由拖动</li>
+          <li><strong>模拟中：</strong>可随时暂停、调整每轮时长、放大缩小视图、查看统计图表</li>
+          <li><strong>返回编辑：</strong>可随时回到编辑模式修改地形或植物参数，重新开始实验。</li>
+        </ul>
+      </div>
+
+      <!-- 英文版内容 -->
+      <div id="introContentEn" class="hidden p-6 overflow-y-auto space-y-4 text-sm text-gray-300 leading-relaxed">
+        <h1 class="text-xl font-bold text-white border-b border-indigo-500/30 pb-2">IsleBloom: Island Plant Competition Observatory</h1>
+        <p>IsleBloom is an interactive ecological simulation web application designed to help users understand and explore the survival, reproduction, and competition dynamics of plant populations in a limited island environment through intuitive visualization.</p>
+        <p>It is built upon a simplified ecological model that integrates core mechanisms such as habitat adaptation, life cycles, reproductive dispersal, intra- and inter-specific competition, and genetic variation. Users can personally design an island ecosystem and observe how different plant species compete, coexist, or go extinct in a resource-constrained space.</p>
+
+        <h2 class="text-base font-bold text-indigo-300 mt-4">1. Core Concepts</h2>
+        <ul class="list-disc pl-5 space-y-1">
+          <li><strong>Island Ecosystem:</strong> Simulates an isolated island with four main habitat types: Water, Beach, Grassland, and Forest. Different plants have specific habitat preferences and can only survive and reproduce in suitable environments.</li>
+          <li><strong>"Survival of the Fittest" Principle:</strong> Each plant species has unique survival strategies. By adjusting parameters, users can observe which species gain dominance through competition and which gradually decline.</li>
+          <li><strong>Dynamic Evolution:</strong> The simulation is not static. As rounds progress, plant population sizes, spatial distribution, and individual traits change realistically, eventually forming stable ecological patterns or dramatic population fluctuations.</li>
+        </ul>
+
+        <h2 class="text-base font-bold text-indigo-300 mt-4">2. Main Features & Gameplay</h2>
+        <p class="font-semibold text-white">(1) Island Editor</p>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>Freely draw island terrain using brushes for Water, Beach, Grassland, and Forest to shape the geographical environment.</li>
+          <li>Customize plant species: Add multiple plants, each with independent settings for name, color, and preferred habitats.</li>
+          <li>Manually place initial plants: Click directly on suitable terrain to place specific plant individuals.</li>
+          <li>One-click random island generation or clear the map to start experiments quickly.</li>
+        </ul>
+
+        <p class="font-semibold text-white mt-2">(2) Plant Parameter System</p>
+        <p>Each plant species has rich adjustable parameters divided into three categories:</p>
+        <div class="bg-gray-800/50 p-3 rounded border border-gray-700">
+          <p class="font-semibold text-yellow-300">Basic Parameters</p>
+          <ul class="list-disc pl-5 text-xs text-gray-400">
+            <li>Plant name and display color</li>
+            <li>Habitat (multiple selection: Water, Beach, Grassland, Forest)</li>
+            <li>Lifespan (rounds): Number of rounds from birth to natural death</li>
+            <li>Juvenile Period (rounds): Protection period during which seedlings cannot reproduce</li>
+            <li>Initial Population: Number of individuals automatically supplemented at the start of simulation</li>
+            <li>Mutation Rate (%): Degree of deviation of new offspring parameters from their parents</li>
+          </ul>
+        </div>
+        <div class="bg-gray-800/50 p-3 rounded border border-gray-700">
+          <p class="font-semibold text-green-300">Reproduction Parameters</p>
+          <ul class="list-disc pl-5 text-xs text-gray-400">
+            <li>Pollination Range (radius units): Requires at least one other mature individual of the same species within range to successfully pollinate</li>
+            <li>Seed Count: Number of seeds produced per reproduction (affected by competition)</li>
+            <li>Seed Dispersal Range (radius units): Distance seeds can spread</li>
+            <li>Seed Survival Rate (%): Probability that a seed successfully germinates and grows into a new individual</li>
+          </ul>
+        </div>
+        <div class="bg-gray-800/50 p-3 rounded border border-gray-700">
+          <p class="font-semibold text-red-300">Competition Parameters</p>
+          <ul class="list-disc pl-5 text-xs text-gray-400">
+            <li>Intra-specific Competition Range & Ability: Resource competition intensity among individuals of the same species</li>
+            <li>Inter-specific Competition Range & Ability: Resource competition intensity between different species</li>
+          </ul>
+        </div>
+        <p class="text-xs text-indigo-200 bg-indigo-900/40 p-2 rounded">Competition significantly reduces reproductive efficiency (effective pollination range, seed count, and seed survival rate all decrease), reflecting real ecological concepts of "density dependence" and "resource competition."</p>
+
+        <h2 class="text-base font-bold text-indigo-300 mt-4">3. Simulation Mechanics</h2>
+        <p>When "Start Simulation" is clicked, the system enters observation mode:</p>
+        <ul class="list-disc pl-5 space-y-1">
+          <li><strong>Life Cycle:</strong> Each individual ages by one round per tick and dies naturally upon reaching its lifespan limit.</li>
+          <li><strong>Reproduction Process:</strong> Only mature individuals past the juvenile period can attempt reproduction. Successful pollination requires at least one other mature individual of the same species within the pollination range. Seeds are produced and randomly dispersed to surrounding suitable habitats. Seeds must pass the survival rate check to grow into new individuals.</li>
+          <li><strong>Competition Effect:</strong> During reproduction, competition pressure from nearby same-species and different-species individuals is calculated. The stronger the competition, the lower the reproductive success rate.</li>
+          <li><strong>Mutation Mechanism:</strong> Each newly born individual has its parameters slightly randomized based on the parent’s values according to the mutation rate, simulating genetic diversity.</li>
+          <li><strong>Spatial Limitation:</strong> Only one plant can occupy each grid cell, preventing infinite stacking.</li>
+        </ul>
+        <p class="mt-2 font-semibold text-white">During simulation, you can:</p>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>View real-time surviving population counts for each species</li>
+          <li>Pause and hover over individual plants to see detailed parameters (age, reproductive status, competition efficiency, etc.)</li>
+          <li>View line charts showing population changes over rounds</li>
+        </ul>
+
+        <h2 class="text-base font-bold text-indigo-300 mt-4">4. Operation Tips</h2>
+        <ul class="list-disc pl-5 space-y-1">
+          <li><strong>Left-click and drag:</strong> Draw terrain or place plants in editor mode</li>
+          <li><strong>Mouse wheel:</strong> Zoom in/out on the map view</li>
+          <li><strong>Draggable panels:</strong> All control panels can be freely dragged</li>
+          <li><strong>During simulation:</strong> Pause at any time, adjust round duration, zoom the view, and view statistical charts</li>
+          <li><strong>Return to Editor:</strong> Switch back to editor mode anytime to modify terrain or plant parameters and restart the experiment</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="plantTooltip" class="tooltip"></div>
+  <canvas id="simCanvas"></canvas>
+
+  <script>
+    let currentLang = 'zh'; // Global language state
+    
+    // UI strings dictionary
+    const STRINGS = {
+      zh: {
+        terrain: { 0: '水域', 1: '沙滩', 2: '草地', 3: '森林' },
+        plant_prefix: '植物 ',
+        settings: '⚙ 设置',
+        btnPlace: ' (放置)',
+        habitatTitle: '生存环境: ',
+        toastMinSpecies: '至少保留一种植物',
+        toastAdded: ' 已添加',
+        toastDeleted: ' 已删除',
+        toastNeedHabitat: '至少选择一个生存环境!',
+        toastInvalidParam: '请正确填写所有参数',
+        toastSaved: ' 参数已保存',
+        toastNoPlantMsg: '地图中没有任何植物的适生环境',
+        toastNeedOnePlant: '至少需要一种植物',
+        toastAllDeleted: '所有植物已删除',
+        pause: '暂停',
+        resume: '继续',
+        speciesStatsTitle: ' 存活数',
+        btnChartPop: ' 数量',
+        roundChartX: '轮次',
+        roundChartY: '植物数量',
+        alertSize: '地图尺寸需在 60 - 220 之间',
+        tooltipParamsTitle: ' 个体参数',
+        tooltipAge: '当前年龄',
+        tooltipRounds: ' 轮',
+        tooltipStatus: '繁殖状态',
+        tooltipCanRepro: '✅ 可繁殖',
+        tooltipJuvenile: '🌱 幼苗期',
+        tooltipHabitat: '生存环境',
+        tooltipMutation: '变异指数',
+        tooltipBaseParams: '— 基本参数 (个体值) —',
+        tooltipLifespan: '生存寿命',
+        tooltipJuvPeriod: '幼苗时期',
+        tooltipReproParams: '— 繁殖参数 (个体值) —',
+        tooltipPollinRange: '传粉范围',
+        tooltipSeedCount: '种子数量',
+        tooltipSeedRange: '种子传播范围',
+        tooltipSeedSurv: '种子存活率',
+        tooltipCompParams: '— 竞争参数 (个体值) —',
+        tooltipIntraRange: '种内竞争范围',
+        tooltipIntraAbil: '种内竞争能力',
+        tooltipInterRange: '种间竞争范围',
+        tooltipInterAbil: '种间竞争能力',
+        tooltipReproEff: '繁殖效率',
+        unknown: '未知',
+        configTitle: '🌿 {name} 参数设置'
+      },
+      en: {
+        terrain: { 0: 'Water', 1: 'Beach', 2: 'Grass', 3: 'Forest' },
+        plant_prefix: 'Plant ',
+        settings: '⚙ Config',
+        btnPlace: ' (Place)',
+        habitatTitle: 'Habitat: ',
+        toastMinSpecies: 'At least one species must remain.',
+        toastAdded: ' added.',
+        toastDeleted: ' deleted.',
+        toastNeedHabitat: 'Please select at least one habitat!',
+        toastInvalidParam: 'Please enter valid parameters.',
+        toastSaved: ' parameters saved.',
+        toastNoPlantMsg: 'No suitable habitat for any plant on the map.',
+        toastNeedOnePlant: 'At least one plant species is required.',
+        toastAllDeleted: 'All plants deleted.',
+        pause: 'Pause',
+        resume: 'Resume',
+        speciesStatsTitle: ' Survivors',
+        btnChartPop: ' Population',
+        roundChartX: 'Rounds',
+        roundChartY: 'Population',
+        alertSize: 'Map size must be between 60 - 220.',
+        tooltipParamsTitle: ' Individual Params',
+        tooltipAge: 'Age',
+        tooltipRounds: ' rounds',
+        tooltipStatus: 'Status',
+        tooltipCanRepro: '✅ Mature',
+        tooltipJuvenile: '🌱 Juvenile',
+        tooltipHabitat: 'Habitat',
+        tooltipMutation: 'Mutation Rate',
+        tooltipBaseParams: '— Basic Params (Individual) —',
+        tooltipLifespan: 'Lifespan',
+        tooltipJuvPeriod: 'Juvenile Period',
+        tooltipReproParams: '— Reproduction Params (Individual) —',
+        tooltipPollinRange: 'Pollination Range',
+        tooltipSeedCount: 'Seed Count',
+        tooltipSeedRange: 'Seed Range',
+        tooltipSeedSurv: 'Seed Survival Rate',
+        tooltipCompParams: '— Competition Params (Individual) —',
+        tooltipIntraRange: 'Intra-comp Range',
+        tooltipIntraAbil: 'Intra-comp Ability',
+        tooltipInterRange: 'Inter-comp Range',
+        tooltipInterAbil: 'Inter-comp Ability',
+        tooltipReproEff: 'Reproduction Efficiency',
+        unknown: 'Unknown',
+        configTitle: '🌿 {name} Parameters'
+      }
+    };
+
+    function S(key) {
+      const keys = key.split('.');
+      let val = STRINGS[currentLang];
+      for (const k of keys) {
+        if (val) val = val[k];
+      }
+      return val || key;
+    }
+
+    const UNIT_PIXEL = 8;
+    const TERRAIN = { WATER: 0, SAND: 1, GRASS: 2, FOREST: 3 };
+    const TERRAIN_COLORS = { 0: '#3b82f6', 1: '#fde047', 2: '#65a30d', 3: '#14532d' };
+
+    const SPECIES_COLOR_POOL = [
+      '#f97316', '#06b6d4', '#a855f7', '#ef4444', '#22c55e',
+      '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#f43f5e',
+      '#84cc16', '#e879f9', '#fb923c', '#67e8f9', '#fbbf24'
+    ];
+
+    function makeDefaultSpecies(id, colorIndex) {
+      const char = String.fromCharCode(65 + colorIndex % 26);
+      return {
+        id: id,
+        name: (currentLang === 'zh' ? '植物 ' : 'Plant ') + char,
+        color: SPECIES_COLOR_POOL[colorIndex % SPECIES_COLOR_POOL.length],
+        habitat: [TERRAIN.GRASS],
+        params: {
+          lifespan: 3 + Math.floor(colorIndex * 0.5),
+          juvenilePeriod: 1,
+          initial: 60 + Math.floor(Math.random() * 40),
+          mutation: 20,
+          pollinationRange: 4,
+          seedCount: 4,
+          seedRange: 5,
+          seedSurvival: 65,
+          intraCompRange: 5,
+          intraCompAbility: 18,
+          interCompRange: 5,
+          interCompAbility: 15,
+        }
+      };
+    }
+
+    class Plant {
+      constructor(x, y, speciesId, baseParams, speciesColor) {
+        this.x = x;
+        this.y = y;
+        this.speciesId = speciesId;
+        this.color = speciesColor;
+
+        const base = { ...baseParams };
+        const mut = (base.mutation || 0) / 100;
+        const getMult = () => 1 + (Math.random() * 2 * mut - mut);
+
+        this.params = {
+          mutation: base.mutation || 0,
+          // 基础参数 - 向上取整
+          lifespan: Math.max(1, Math.ceil(base.lifespan * getMult())),
+          juvenilePeriod: Math.max(0, Math.ceil(base.juvenilePeriod * getMult())),
+          // 繁殖参数 - 四舍五入
+          pollinationRange: Math.max(1, Math.round(base.pollinationRange * getMult())),
+          seedCount: Math.max(1, Math.round(base.seedCount * getMult())),
+          seedRange: Math.max(1, Math.round(base.seedRange * getMult())),
+          seedSurvival: Math.max(0, Math.min(100, Math.round(base.seedSurvival * getMult()))),
+          // 竞争参数 - 四舍五入
+          intraCompRange: Math.max(0, Math.round((base.intraCompRange || 0) * getMult())),
+          intraCompAbility: Math.max(0, Math.min(100, Math.round((base.intraCompAbility || 0) * getMult()))),
+          interCompRange: Math.max(0, Math.round((base.interCompRange || 0) * getMult())),
+          interCompAbility: Math.max(0, Math.min(100, Math.round((base.interCompAbility || 0) * getMult()))),
+        };
+
+        this.age = 0;
+        this.alive = true;
+      }
+
+      tick() {
+        this.age += 1;
+        if (this.age >= this.params.lifespan) {
+          this.alive = false;
+        }
+      }
+
+      draw(ctx, radius) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+      }
+    }
+
+    class IsleBloomSim {
+      constructor() {
+        this.canvas = document.getElementById('simCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.tooltip = document.getElementById('plantTooltip');
+
+        this.mapW = 120;
+        this.mapH = 90;
+        this.map = [];
+
+        this.state = 'HOME';
+        this.brushType = TERRAIN.WATER;
+        this.brushSize = 3;
+        this.isDrawing = false;
+
+        this.zoom = 1;
+        this.minZoom = 0.65;
+        this.maxZoom = 3;
+
+        this.plants = [];
+        this.round = 0;
+        this.roundTimer = 0;
+        this.roundDuration = 1.0;
+        this.paused = false;
+
+        this.lastTime = performance.now();
+        this.hoverPlant = null;
+        this.history = [];
+        this.chart = null;
+
+        // Dynamic species
+        this.speciesList = [];
+        this.nextSpeciesId = 0;
+        this.nextColorIndex = 0;
+        this.editingSpeciesId = null;
+
+        // Create two default species
+        this.addSpecies();
+        this.addSpecies();
+
+        this.resizeCanvas();
+        this.generateIsland();
+        this.bindUI();
+        this.bindPanelEvents();
+        this.bindCanvasEvents();
+        this.bindLanguageEvents();
+        
+        this.renderSpeciesList();
+        this.renderPlantBrushes();
+
+        window.addEventListener('resize', () => this.resizeCanvas());
+        requestAnimationFrame((t) => this.loop(t));
+      }
+
+      bindLanguageEvents() {
+        const btnZh = document.getElementById('langSelectZh');
+        const btnEn = document.getElementById('langSelectEn');
+
+        const setLang = (lang) => {
+          currentLang = lang;
+          document.body.className = 'lang-' + lang;
+          
+          if (lang === 'zh') {
+            btnZh.className = 'px-6 py-2 rounded-full bg-blue-600 text-white text-sm font-bold shadow-lg transition-all';
+            btnEn.className = 'px-6 py-2 rounded-full bg-transparent hover:bg-white/10 text-gray-300 text-sm font-bold transition-all cursor-pointer';
+          } else {
+            btnEn.className = 'px-6 py-2 rounded-full bg-blue-600 text-white text-sm font-bold shadow-lg transition-all';
+            btnZh.className = 'px-6 py-2 rounded-full bg-transparent hover:bg-white/10 text-gray-300 text-sm font-bold transition-all cursor-pointer';
+          }
+
+          // Update dynamically rendered content
+          this.renderSpeciesList();
+          this.renderPlantBrushes();
+          if (this.state === 'SIM') {
+            this.renderSimLegend();
+            this.updateStatusTexts();
+            document.getElementById('btnPause').textContent = this.paused ? S('resume') : S('pause');
+            if (this.chart) this.renderChart();
+          }
+          if (this.editingSpeciesId != null && !document.getElementById('speciesConfigModal').classList.contains('hidden')) {
+            this.openSpeciesConfig(this.editingSpeciesId); // re-render config window
+          }
+          if (this.hoverPlant) {
+            this.tooltip.style.display = 'none'; // quick hide on lang change
+          }
+        };
+
+        btnZh.addEventListener('click', () => setLang('zh'));
+        btnEn.addEventListener('click', () => setLang('en'));
+      }
+
+      addSpecies() {
+        const sp = makeDefaultSpecies(this.nextSpeciesId, this.nextColorIndex);
+        this.speciesList.push(sp);
+        this.nextSpeciesId++;
+        this.nextColorIndex++;
+        return sp;
+      }
+
+      removeSpecies(id) {
+        if (this.speciesList.length <= 1) {
+          this.showToast(S('toastMinSpecies'), 'red');
+          return;
+        }
+        this.speciesList = this.speciesList.filter(s => s.id !== id);
+        this.plants = this.plants.filter(p => p.speciesId !== id);
+        if (this.brushType < 0 && (-this.brushType - 1) === id) {
+          this.brushType = TERRAIN.WATER;
+        }
+        this.renderSpeciesList();
+        this.renderPlantBrushes();
+        this.rebindBrushButtons();
+      }
+
+      getSpecies(id) {
+        return this.speciesList.find(s => s.id === id);
+      }
+
+      showToast(message, color = 'blue') {
+        const colorMap = {
+          blue: 'bg-blue-600', orange: 'bg-orange-600', cyan: 'bg-cyan-600',
+          green: 'bg-green-600', red: 'bg-red-600', purple: 'bg-purple-600'
+        };
+        const bg = colorMap[color] || 'bg-blue-600';
+        const toast = document.createElement('div');
+        toast.className = `fixed top-4 left-1/2 transform -translate-x-1/2 ${bg} text-white px-4 py-2 rounded-lg shadow-lg z-[200] text-sm font-semibold`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transition = 'opacity 0.3s';
+          setTimeout(() => toast.remove(), 300);
+        }, 2000);
+      }
+
+      renderSpeciesList() {
+        const container = document.getElementById('speciesListContainer');
+        container.innerHTML = '';
+        this.speciesList.forEach(sp => {
+          const card = document.createElement('div');
+          card.className = 'species-card';
+          card.innerHTML = `
+            <div class="color-dot" style="background:${sp.color};"></div>
+            <span class="flex-1 text-xs font-semibold truncate" style="color:${sp.color};">${sp.name}</span>
+            <button class="bg-gray-600 hover:bg-gray-500 text-white text-[10px] px-2 py-1 rounded cursor-pointer sp-config-btn" data-id="${sp.id}">${S('settings')}</button>
+          `;
+          container.appendChild(card);
+        });
+
+        // Bind config buttons
+        container.querySelectorAll('.sp-config-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.id);
+            this.openSpeciesConfig(id);
+          });
+        });
+      }
+
+      renderPlantBrushes() {
+        const container = document.getElementById('plantBrushes');
+        container.innerHTML = '';
+        this.speciesList.forEach(sp => {
+          const btn = document.createElement('button');
+          btn.className = 'brush-btn text-white rounded py-2 text-xs cursor-pointer';
+          btn.style.backgroundColor = sp.color;
+          btn.dataset.terrain = String(-(sp.id + 1));
+          const habitats = sp.habitat.map(h => S(`terrain.${h}`)).join('+');
+          btn.textContent = `${sp.name}${S('btnPlace')}`;
+          btn.title = `${S('habitatTitle')}${habitats}`;
+          container.appendChild(btn);
+        });
+        this.rebindBrushButtons();
+      }
+
+      rebindBrushButtons() {
+        document.querySelectorAll('.brush-btn').forEach(btn => {
+          // Remove old listeners by cloning
+          const newBtn = btn.cloneNode(true);
+          btn.parentNode.replaceChild(newBtn, btn);
+        });
+        document.querySelectorAll('.brush-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            this.brushType = parseInt(btn.dataset.terrain, 10);
+            document.querySelectorAll('.brush-btn').forEach(b => {
+              b.classList.remove('ring-2', 'ring-white');
+            });
+            btn.classList.add('ring-2', 'ring-white');
+          });
+        });
+      }
+
+      openSpeciesConfig(id) {
+        const sp = this.getSpecies(id);
+        if (!sp) return;
+        this.editingSpeciesId = id;
+
+        const modal = document.getElementById('speciesConfigModal');
+        const header = document.getElementById('speciesConfigHeader');
+        const inner = document.getElementById('speciesConfigInner');
+
+        header.style.background = `linear-gradient(to right, ${sp.color}22, ${sp.color}11)`;
+        inner.style.borderColor = sp.color;
+        document.getElementById('speciesConfigTitle').textContent = S('configTitle').replace('{name}', sp.name);
+        document.getElementById('speciesConfigTitle').style.color = sp.color;
+
+        document.getElementById('cfgName').value = sp.name;
+        document.getElementById('cfgColor').value = sp.color;
+        document.getElementById('cfgLifespan').value = sp.params.lifespan;
+        document.getElementById('cfgJuvenile').value = sp.params.juvenilePeriod;
+        document.getElementById('cfgInitial').value = sp.params.initial;
+        document.getElementById('cfgMutation').value = sp.params.mutation;
+        document.getElementById('cfgPollination').value = sp.params.pollinationRange;
+        document.getElementById('cfgSeedCount').value = sp.params.seedCount;
+        document.getElementById('cfgSeedRange').value = sp.params.seedRange;
+        document.getElementById('cfgSeedSurvival').value = sp.params.seedSurvival;
+        document.getElementById('cfgIntraCompRange').value = sp.params.intraCompRange;
+        document.getElementById('cfgIntraCompAbility').value = sp.params.intraCompAbility;
+        document.getElementById('cfgInterCompRange').value = sp.params.interCompRange;
+        document.getElementById('cfgInterCompAbility').value = sp.params.interCompAbility;
+
+        // Habitat buttons
+        document.querySelectorAll('#cfgHabitatGroup .habitat-btn').forEach(btn => {
+          const t = parseInt(btn.dataset.terrain);
+          if (sp.habitat.includes(t)) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+
+        // Show delete button only if more than 1 species
+        document.getElementById('deleteSpeciesConfig').style.display =
+          this.speciesList.length > 1 ? '' : 'none';
+
+        modal.classList.remove('hidden');
+      }
+
+      saveSpeciesConfig() {
+        const sp = this.getSpecies(this.editingSpeciesId);
+        if (!sp) return;
+
+        const name = document.getElementById('cfgName').value.trim() || sp.name;
+        const color = document.getElementById('cfgColor').value;
+
+        const habitat = [];
+        document.querySelectorAll('#cfgHabitatGroup .habitat-btn.active').forEach(btn => {
+          habitat.push(parseInt(btn.dataset.terrain));
+        });
+        if (habitat.length === 0) {
+          this.showToast(S('toastNeedHabitat'), 'red');
+          return;
+        }
+
+        const vals = {
+          lifespan: parseInt(document.getElementById('cfgLifespan').value),
+          juvenilePeriod: parseInt(document.getElementById('cfgJuvenile').value),
+          initial: parseInt(document.getElementById('cfgInitial').value),
+          mutation: parseInt(document.getElementById('cfgMutation').value),
+          pollinationRange: parseInt(document.getElementById('cfgPollination').value),
+          seedCount: parseInt(document.getElementById('cfgSeedCount').value),
+          seedRange: parseInt(document.getElementById('cfgSeedRange').value),
+          seedSurvival: parseInt(document.getElementById('cfgSeedSurvival').value),
+          intraCompRange: parseInt(document.getElementById('cfgIntraCompRange').value),
+          intraCompAbility: parseInt(document.getElementById('cfgIntraCompAbility').value),
+          interCompRange: parseInt(document.getElementById('cfgInterCompRange').value),
+          interCompAbility: parseInt(document.getElementById('cfgInterCompAbility').value),
+        };
+
+        if (Object.values(vals).some(v => isNaN(v))) {
+          this.showToast(S('toastInvalidParam'), 'red');
+          return;
+        }
+
+        sp.name = name;
+        sp.color = color;
+        sp.habitat = habitat;
+        sp.params = {
+          lifespan: Math.max(1, vals.lifespan),
+          juvenilePeriod: Math.max(0, vals.juvenilePeriod),
+          initial: Math.max(0, vals.initial),
+          mutation: Math.max(0, Math.min(100, vals.mutation)),
+          pollinationRange: Math.max(1, vals.pollinationRange),
+          seedCount: Math.max(1, vals.seedCount),
+          seedRange: Math.max(1, vals.seedRange),
+          seedSurvival: Math.max(0, Math.min(100, vals.seedSurvival)),
+          intraCompRange: Math.max(0, vals.intraCompRange),
+          intraCompAbility: Math.max(0, Math.min(100, vals.intraCompAbility)),
+          interCompRange: Math.max(0, vals.interCompRange),
+          interCompAbility: Math.max(0, Math.min(100, vals.interCompAbility)),
+        };
+
+        // Update existing placed plants' color
+        this.plants.forEach(p => {
+          if (p.speciesId === sp.id) p.color = sp.color;
+        });
+
+        this.renderSpeciesList();
+        this.renderPlantBrushes();
+        document.getElementById('speciesConfigModal').classList.add('hidden');
+        this.showToast(`${sp.name}${S('toastSaved')}`, 'green');
+      }
+
+      resizeCanvas() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+      }
+
+      bindPanelEvents() {
+        const editorPanel = document.getElementById('editorPanel');
+        this.makeDraggable(editorPanel, document.getElementById('editorPanelHeader'));
+
+        document.getElementById('editorMinimize').addEventListener('click', (e) => {
+          e.stopPropagation();
+          editorPanel.classList.toggle('minimized');
+          e.target.textContent = editorPanel.classList.contains('minimized') ? '+' : '−';
+        });
+
+        const simPanel = document.getElementById('simPanel');
+        this.makeDraggable(simPanel, document.getElementById('simPanelHeader'));
+
+        document.getElementById('simMinimize').addEventListener('click', (e) => {
+          e.stopPropagation();
+          simPanel.classList.toggle('minimized');
+          e.target.textContent = simPanel.classList.contains('minimized') ? '+' : '−';
+        });
+
+        // Species config modal
+        document.getElementById('closeSpeciesConfig').addEventListener('click', () => {
+          document.getElementById('speciesConfigModal').classList.add('hidden');
+        });
+        document.getElementById('speciesConfigModal').addEventListener('click', (e) => {
+          if (e.target.id === 'speciesConfigModal') {
+            document.getElementById('speciesConfigModal').classList.add('hidden');
+          }
+        });
+        document.getElementById('saveSpeciesConfig').addEventListener('click', () => {
+          this.saveSpeciesConfig();
+        });
+        document.getElementById('deleteSpeciesConfig').addEventListener('click', () => {
+          if (this.editingSpeciesId != null) {
+            const sp = this.getSpecies(this.editingSpeciesId);
+            const name = sp ? sp.name : '';
+            this.removeSpecies(this.editingSpeciesId);
+            document.getElementById('speciesConfigModal').classList.add('hidden');
+            this.showToast(`${name}${S('toastDeleted')}`, 'red');
+          }
+        });
+
+        // Habitat toggle buttons
+        document.querySelectorAll('#cfgHabitatGroup .habitat-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            btn.classList.toggle('active');
+          });
+        });
+
+        // Add species button
+        document.getElementById('btnAddSpecies').addEventListener('click', () => {
+          const sp = this.addSpecies();
+          this.renderSpeciesList();
+          this.renderPlantBrushes();
+          this.openSpeciesConfig(sp.id);
+          this.showToast(`${sp.name}${S('toastAdded')}`, 'green');
+        });
+
+        // Introduction & Instructions
+        const introModal = document.getElementById('introModal');
+        const introZh = document.getElementById('introContentZh');
+        const introEn = document.getElementById('introContentEn');
+        const btnIntroZh = document.getElementById('btnIntroZh');
+        const btnIntroEn = document.getElementById('btnIntroEn');
+
+        document.getElementById('btnIntro').addEventListener('click', () => {
+          introModal.classList.remove('hidden');
+        });
+
+        document.getElementById('closeIntro').addEventListener('click', () => {
+          introModal.classList.add('hidden');
+        });
+
+        introModal.addEventListener('click', (e) => {
+          if (e.target === introModal) introModal.classList.add('hidden');
+        });
+
+        btnIntroZh.addEventListener('click', () => {
+          introZh.classList.remove('hidden');
+          introEn.classList.add('hidden');
+          btnIntroZh.classList.add('bg-indigo-700', 'text-white');
+          btnIntroZh.classList.remove('bg-gray-700', 'text-gray-300');
+          btnIntroEn.classList.add('bg-gray-700', 'text-gray-300');
+          btnIntroEn.classList.remove('bg-indigo-700', 'text-white');
+        });
+
+        btnIntroEn.addEventListener('click', () => {
+          introEn.classList.remove('hidden');
+          introZh.classList.add('hidden');
+          btnIntroEn.classList.add('bg-indigo-700', 'text-white');
+          btnIntroEn.classList.remove('bg-gray-700', 'text-gray-300');
+          btnIntroZh.classList.add('bg-gray-700', 'text-gray-300');
+          btnIntroZh.classList.remove('bg-indigo-700', 'text-white');
+        });
+
+        // Chart
+        document.getElementById('btnChart').addEventListener('click', () => this.showChart());
+        document.getElementById('closeChart').addEventListener('click', () => this.hideChart());
+        document.getElementById('chartModal').addEventListener('click', (e) => {
+          if (e.target.id === 'chartModal') this.hideChart();
+        });
+      }
+
+      makeDraggable(panel, handle) {
+        let isDragging = false;
+        let startX, startY, initialLeft, initialTop;
+        handle.addEventListener('mousedown', (e) => {
+          if (e.target.classList.contains('panel-minimize')) return;
+          isDragging = true;
+          startX = e.clientX; startY = e.clientY;
+          initialLeft = panel.offsetLeft; initialTop = panel.offsetTop;
+          panel.style.zIndex = 100;
+        });
+        document.addEventListener('mousemove', (e) => {
+          if (!isDragging) return;
+          panel.style.left = (initialLeft + e.clientX - startX) + 'px';
+          panel.style.top = (initialTop + e.clientY - startY) + 'px';
+        });
+        document.addEventListener('mouseup', () => { isDragging = false; panel.style.zIndex = 20; });
+      }
+
+      showChart() {
+        if (!this.paused) {
+          this.paused = true;
+          document.getElementById('btnPause').textContent = S('resume');
+        }
+        document.getElementById('chartModal').classList.remove('hidden');
+        this.renderChart();
+      }
+      hideChart() { document.getElementById('chartModal').classList.add('hidden'); }
+
+      renderChart() {
+        const canvas = document.getElementById('popChart');
+        const labels = this.history.map(h => h.round);
+        const datasets = this.speciesList.map(sp => ({
+          label: sp.name + S('btnChartPop'),
+          data: this.history.map(h => h.counts[sp.id] || 0),
+          borderColor: sp.color,
+          backgroundColor: sp.color + '1a',
+          fill: true, tension: 0.2, pointRadius: 2
+        }));
+
+        const chartData = { labels, datasets };
+        if (this.chart) {
+          this.chart.options.scales.x.title.text = S('roundChartX');
+          this.chart.options.scales.y.title.text = S('roundChartY');
+          this.chart.data = chartData;
+          this.chart.update();
+        } else {
+          this.chart = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: chartData,
+            options: {
+              responsive: true, maintainAspectRatio: false, animation: false,
+              scales: {
+                x: { title: { display: true, text: S('roundChartX'), color: '#9ca3af' }, ticks: { color: '#9ca3af' }, grid: { color: '#374151' } },
+                y: { beginAtZero: true, title: { display: true, text: S('roundChartY'), color: '#9ca3af' }, ticks: { color: '#9ca3af' }, grid: { color: '#374151' } }
+              },
+              plugins: { legend: { labels: { color: 'white' } } }
+            }
+          });
+        }
+      }
+
+      bindUI() {
+        this.rebindBrushButtons();
+
+        document.getElementById('brushSize').addEventListener('input', (e) => {
+          this.brushSize = parseInt(e.target.value, 10);
+          document.getElementById('brushSizeText').textContent = this.brushSize;
+        });
+
+        document.getElementById('btnEnterEditor').addEventListener('click', () => {
+          this.state = 'EDITOR';
+          const hs = document.getElementById('homeScreen');
+          hs.style.opacity = '0';
+          setTimeout(() => { hs.style.display = 'none'; }, 500);
+          document.getElementById('editorPanel').style.display = 'block';
+        });
+
+        document.getElementById('btnHome').addEventListener('click', () => {
+          this.state = 'HOME';
+          document.getElementById('editorPanel').style.display = 'none';
+          const hs = document.getElementById('homeScreen');
+          hs.style.display = 'flex';
+          setTimeout(() => { hs.style.opacity = '1'; }, 10);
+        });
+
+        document.getElementById('btnRandom').addEventListener('click', () => this.generateIsland());
+        document.getElementById('btnClear').addEventListener('click', () => this.clearToWater());
+        document.getElementById('btnClearPlants').addEventListener('click', () => { this.plants = []; this.showToast(S('toastAllDeleted'), 'orange'); });
+
+        document.getElementById('btnResize').addEventListener('click', () => {
+          const w = parseInt(document.getElementById('mapW').value, 10);
+          const h = parseInt(document.getElementById('mapH').value, 10);
+          if (isNaN(w) || isNaN(h) || w < 60 || w > 220 || h < 60 || h > 220) {
+            alert(S('alertSize')); return;
+          }
+          this.mapW = w; this.mapH = h;
+          this.generateIsland();
+        });
+
+        document.getElementById('btnStart').addEventListener('click', () => this.startSimulation());
+        document.getElementById('btnPause').addEventListener('click', () => {
+          this.paused = !this.paused;
+          document.getElementById('btnPause').textContent = this.paused ? S('resume') : S('pause');
+        });
+        document.getElementById('btnBack').addEventListener('click', () => this.backToEditor());
+        document.getElementById('btnZoomIn').addEventListener('click', () => this.setZoom(this.zoom + 0.15));
+        document.getElementById('btnZoomOut').addEventListener('click', () => this.setZoom(this.zoom - 0.15));
+        document.getElementById('roundDuration').addEventListener('input', (e) => {
+          this.roundDuration = parseFloat(e.target.value);
+        });
+      }
+
+      bindCanvasEvents() {
+        this.canvas.addEventListener('mousedown', (e) => {
+          if (this.state !== 'EDITOR') return;
+          this.isDrawing = true;
+          this.paintAt(e.clientX, e.clientY);
+        });
+        window.addEventListener('mouseup', () => { this.isDrawing = false; });
+        this.canvas.addEventListener('mousemove', (e) => {
+          if (this.state === 'EDITOR' && this.isDrawing) this.paintAt(e.clientX, e.clientY);
+          if (this.state === 'SIM') this.updateHover(e.clientX, e.clientY);
+        });
+        this.canvas.addEventListener('mouseleave', () => {
+          this.hoverPlant = null;
+          this.tooltip.style.display = 'none';
+        });
+        this.canvas.addEventListener('wheel', (e) => {
+          if (this.state === 'HOME') return;
+          e.preventDefault();
+          this.setZoom(this.zoom + (e.deltaY < 0 ? 0.1 : -0.1));
+        }, { passive: false });
+      }
+
+      setZoom(z) {
+        this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, z));
+        const zt = document.getElementById('zoomText');
+        if (zt) zt.textContent = this.zoom.toFixed(2) + 'x';
+      }
+
+      clearToWater() {
+        this.map = [];
+        for (let y = 0; y < this.mapH; y++) {
+          this.map[y] = new Array(this.mapW).fill(TERRAIN.WATER);
+        }
+        this.plants = [];
+      }
+
+      generateIsland() {
+        this.map = [];
+        const cx = this.mapW / 2, cy = this.mapH / 2;
+        const maxDist = Math.min(this.mapW, this.mapH) * 0.48;
+        for (let y = 0; y < this.mapH; y++) {
+          this.map[y] = [];
+          for (let x = 0; x < this.mapW; x++) {
+            const d = Math.hypot(x - cx, y - cy) + (Math.random() - 0.5) * 6;
+            let t = TERRAIN.WATER;
+            if (d < maxDist * 0.95) t = TERRAIN.SAND;
+            if (d < maxDist * 0.8) t = TERRAIN.GRASS;
+            if (d < maxDist * 0.45) t = TERRAIN.FOREST;
+            this.map[y][x] = t;
+          }
+        }
+        this.carveLakes(3);
+        this.carveRivers(2);
+      }
+
+      carveLakes(count) {
+        for (let i = 0; i < count; i++) {
+          const lx = Math.floor(Math.random() * this.mapW * 0.5 + this.mapW * 0.25);
+          const ly = Math.floor(Math.random() * this.mapH * 0.5 + this.mapH * 0.25);
+          const r = Math.random() * 8 + 4;
+          for (let y = 0; y < this.mapH; y++)
+            for (let x = 0; x < this.mapW; x++)
+              if (Math.hypot(x - lx, y - ly) < r + Math.random() * 1.5) this.map[y][x] = TERRAIN.WATER;
+        }
+      }
+
+      carveRivers(count) {
+        for (let i = 0; i < count; i++) {
+          let x = Math.floor(this.mapW / 2 + (Math.random() - 0.5) * 10);
+          let y = Math.floor(this.mapH / 2 + (Math.random() - 0.5) * 10);
+          const dir = Math.random() < 0.5 ? 1 : -1;
+          while (x > 1 && x < this.mapW - 2 && y > 1 && y < this.mapH - 2) {
+            this.map[y][x] = TERRAIN.WATER;
+            if (Math.random() < 0.58) x += dir; else y += Math.random() < 0.5 ? 1 : -1;
+          }
+        }
+      }
+
+      mapTransform() {
+        const mapPxW = this.mapW * UNIT_PIXEL, mapPxH = this.mapH * UNIT_PIXEL;
+        const scale = Math.min(this.canvas.width / mapPxW, this.canvas.height / mapPxH) * 0.92 * this.zoom;
+        const drawW = mapPxW * scale, drawH = mapPxH * scale;
+        return { scale, offsetX: (this.canvas.width - drawW) / 2, offsetY: (this.canvas.height - drawH) / 2 };
+      }
+
+      screenToGrid(cx, cy) {
+        const { scale, offsetX, offsetY } = this.mapTransform();
+        const mx = (cx - offsetX) / scale, my = (cy - offsetY) / scale;
+        return { gx: Math.floor(mx / UNIT_PIXEL), gy: Math.floor(my / UNIT_PIXEL), px: mx, py: my };
+      }
+
+      paintAt(clientX, clientY) {
+        const { gx, gy } = this.screenToGrid(clientX, clientY);
+
+        // Plant placement (brushType < 0 means species id = -(brushType+1))
+        if (this.brushType < 0) {
+          const speciesId = -(this.brushType + 1);
+          const sp = this.getSpecies(speciesId);
+          if (!sp) return;
+          if (gx < 0 || gx >= this.mapW || gy < 0 || gy >= this.mapH) return;
+          const terrain = this.map[gy][gx];
+          if (!sp.habitat.includes(terrain)) return;
+          if (this.isCellOccupied(gx, gy)) return;
+          this.plants.push(new Plant(
+            (gx + 0.5) * UNIT_PIXEL, (gy + 0.5) * UNIT_PIXEL,
+            sp.id, sp.params, sp.color
+          ));
+          return;
+        }
+
+        const r = this.brushSize - 1;
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (dx * dx + dy * dy > r * r + 1) continue;
+            const tx = gx + dx, ty = gy + dy;
+            if (tx >= 0 && tx < this.mapW && ty >= 0 && ty < this.mapH) {
+              this.map[ty][tx] = this.brushType;
+            }
+          }
+        }
+      }
+
+      isCellOccupied(gx, gy) {
+        for (const p of this.plants) {
+          if (!p.alive) continue;
+          if (Math.floor(p.x / UNIT_PIXEL) === gx && Math.floor(p.y / UNIT_PIXEL) === gy) return true;
+        }
+        return false;
+      }
+
+      isCellOccupiedInList(list, gx, gy) {
+        for (const p of list) {
+          if (!p.alive) continue;
+          if (Math.floor(p.x / UNIT_PIXEL) === gx && Math.floor(p.y / UNIT_PIXEL) === gy) return true;
+        }
+        return false;
+      }
+
+      startSimulation() {
+        if (this.speciesList.length === 0) {
+          alert(S('toastNeedOnePlant')); return;
+        }
+
+        // Collect habitable cells per species
+        const habitableCells = {};
+        this.speciesList.forEach(sp => {
+          habitableCells[sp.id] = [];
+          for (let y = 0; y < this.mapH; y++)
+            for (let x = 0; x < this.mapW; x++)
+              if (sp.habitat.includes(this.map[y][x])) habitableCells[sp.id].push({ x, y });
+        });
+
+        // Check at least one species has habitable cells
+        const anyHabitable = this.speciesList.some(sp => habitableCells[sp.id].length > 0);
+        if (!anyHabitable) {
+          alert(S('toastNoPlantMsg')); return;
+        }
+
+        let allPlants = this.plants.filter(p => p.alive);
+
+        // Place initial plants for each species
+        this.speciesList.forEach(sp => {
+          const cells = habitableCells[sp.id];
+          if (cells.length === 0) return;
+          const existing = allPlants.filter(p => p.speciesId === sp.id).length;
+          let remaining = Math.max(0, sp.params.initial - existing);
+          for (let i = 0; i < remaining; i++) {
+            let attempts = 0, placed = false;
+            while (attempts < 80) {
+              const c = cells[Math.floor(Math.random() * cells.length)];
+              if (!this.isCellOccupiedInList(allPlants, c.x, c.y)) {
+                allPlants.push(new Plant(
+                  (c.x + 0.5) * UNIT_PIXEL, (c.y + 0.5) * UNIT_PIXEL,
+                  sp.id, sp.params, sp.color
+                ));
+                placed = true; break;
+              }
+              attempts++;
+            }
+            if (!placed) break;
+          }
+        });
+
+        this.plants = allPlants;
+        this.round = 0;
+        this.roundTimer = 0;
+        this.paused = false;
+        document.getElementById('btnPause').textContent = S('pause');
+
+        this.history = [];
+        if (this.chart) { this.chart.destroy(); this.chart = null; }
+
+        const counts = {};
+        this.speciesList.forEach(sp => {
+          counts[sp.id] = this.plants.filter(p => p.alive && p.speciesId === sp.id).length;
+        });
+        this.history.push({ round: 0, counts });
+
+        this.state = 'SIM';
+        document.getElementById('editorPanel').style.display = 'none';
+        document.getElementById('simPanel').style.display = 'block';
+        this.renderSimLegend();
+        this.updateStatusTexts();
+      }
+
+      renderSimLegend() {
+        const container = document.getElementById('simLegend');
+        container.innerHTML = this.speciesList.map(sp => {
+          const habitats = sp.habitat.map(h => S(`terrain.${h}`)).join(', ');
+          return `<div class="mt-1"><span class="legend-dot" style="background:${sp.color};"></span>${sp.name} (${habitats})</div>`;
+        }).join('');
+      }
+
+      backToEditor() {
+        this.state = 'EDITOR';
+        this.tooltip.style.display = 'none';
+        document.getElementById('simPanel').style.display = 'none';
+        document.getElementById('editorPanel').style.display = 'block';
+        this.history = [];
+        if (this.chart) { this.chart.destroy(); this.chart = null; }
+      }
+
+      updateStatusTexts() {
+        document.getElementById('roundText').textContent = this.round;
+        const container = document.getElementById('simSpeciesStats');
+        container.innerHTML = this.speciesList.map(sp => {
+          const count = this.plants.filter(p => p.alive && p.speciesId === sp.id).length;
+          return `<div class="flex justify-between"><span>${sp.name}${S('speciesStatsTitle')}</span><span class="font-bold" style="color:${sp.color};">${count}</span></div>`;
+        }).join('');
+      }
+
+      calcCompetitionMultiplier(target, allAlive) {
+        let multiplier = 1.0;
+        for (const other of allAlive) {
+          if (other === target) continue;
+          const dist = Math.hypot(other.x - target.x, other.y - target.y) / UNIT_PIXEL;
+          if (other.speciesId === target.speciesId) {
+            if (other.params.intraCompRange > 0 && dist <= other.params.intraCompRange)
+              multiplier *= (1 - other.params.intraCompAbility / 100);
+          } else {
+            if (other.params.interCompRange > 0 && dist <= other.params.interCompRange)
+              multiplier *= (1 - other.params.interCompAbility / 100);
+          }
+        }
+        return Math.max(0, multiplier);
+      }
+
+      oneRound() {
+        this.round += 1;
+
+        const alive = this.plants.filter(p => p.alive);
+        alive.forEach(p => p.tick());
+
+        const aliveAfterAging = this.plants.filter(p => p.alive);
+        const maturePlants = aliveAfterAging.filter(p => p.age > p.params.juvenilePeriod);
+        const proposedBabies = [];
+
+        for (let i = 0; i < maturePlants.length; i++) {
+          const p = maturePlants[i];
+          const compMult = this.calcCompetitionMultiplier(p, aliveAfterAging);
+
+          const effPollinationRange = p.params.pollinationRange * compMult;
+          const effSeedCount = Math.max(0, Math.round(p.params.seedCount * compMult));
+          const effSeedRange = p.params.seedRange * compMult;
+          const effSeedSurvival = p.params.seedSurvival * compMult;
+
+          if (effSeedCount <= 0) continue;
+
+          // Check same-species mate
+          let hasMate = false;
+          for (let j = 0; j < maturePlants.length; j++) {
+            if (i === j) continue;
+            const q = maturePlants[j];
+            if (q.speciesId !== p.speciesId) continue;
+            if (Math.hypot(q.x - p.x, q.y - p.y) / UNIT_PIXEL <= effPollinationRange) {
+              hasMate = true; break;
+            }
+          }
+          if (!hasMate) continue;
+
+          // Get habitat for this species
+          const sp = this.getSpecies(p.speciesId);
+          const habitat = sp ? sp.habitat : [TERRAIN.GRASS];
+
+          for (let s = 0; s < effSeedCount; s++) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = Math.random() * effSeedRange * UNIT_PIXEL;
+            const sx = p.x + Math.cos(angle) * radius;
+            const sy = p.y + Math.sin(angle) * radius;
+            const gx = Math.floor(sx / UNIT_PIXEL);
+            const gy = Math.floor(sy / UNIT_PIXEL);
+
+            if (gx < 0 || gx >= this.mapW || gy < 0 || gy >= this.mapH) continue;
+            if (!habitat.includes(this.map[gy][gx])) continue;
+
+            if (Math.random() * 100 <= effSeedSurvival) {
+              // offspring inherits parent's mutated params as base
+              proposedBabies.push({ gx, gy, speciesId: p.speciesId, params: p.params, color: p.color });
+            }
+          }
+        }
+
+        // Deduplicate
+        const occupiedCells = new Set();
+        for (const p of aliveAfterAging) {
+          occupiedCells.add(Math.floor(p.x / UNIT_PIXEL) + ',' + Math.floor(p.y / UNIT_PIXEL));
+        }
+
+        // Shuffle
+        for (let i = proposedBabies.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [proposedBabies[i], proposedBabies[j]] = [proposedBabies[j], proposedBabies[i]];
+        }
+
+        const finalBabies = [];
+        for (const baby of proposedBabies) {
+          const key = baby.gx + ',' + baby.gy;
+          if (!occupiedCells.has(key)) {
+            occupiedCells.add(key);
+            finalBabies.push(new Plant(
+              (baby.gx + 0.5) * UNIT_PIXEL, (baby.gy + 0.5) * UNIT_PIXEL,
+              baby.speciesId, baby.params, baby.color
+            ));
+          }
+        }
+
+        this.plants = [...aliveAfterAging, ...finalBabies];
+
+        const counts = {};
+        this.speciesList.forEach(sp => {
+          counts[sp.id] = this.plants.filter(p => p.alive && p.speciesId === sp.id).length;
+        });
+        this.history.push({ round: this.round, counts });
+        this.updateStatusTexts();
+      }
+
+      updateHover(clientX, clientY) {
+        const { px, py } = this.screenToGrid(clientX, clientY);
+        let found = null;
+        for (const p of this.plants) {
+          if (!p.alive) continue;
+          if (Math.hypot(p.x - px, p.y - py) <= 5) { found = p; break; }
+        }
+
+        this.hoverPlant = found;
+        if (!found) { this.tooltip.style.display = 'none'; return; }
+
+        const sp = this.getSpecies(found.speciesId);
+        const speciesName = sp ? sp.name : S('unknown');
+        const habitat = sp ? sp.habitat.map(h => S(`terrain.${h}`)).join(', ') : '?';
+
+        const aliveAll = this.plants.filter(p => p.alive);
+        const compMult = this.calcCompetitionMultiplier(found, aliveAll);
+        const compPercent = (compMult * 100).toFixed(1);
+
+        this.tooltip.style.display = 'block';
+        this.tooltip.style.left = clientX + 14 + 'px';
+        this.tooltip.style.top = clientY + 14 + 'px';
+        this.tooltip.innerHTML = [
+          `<div class="font-bold mb-1" style="color:${found.color};">${speciesName}${S('tooltipParamsTitle')}</div>`,
+          `<div>${S('tooltipAge')}: ${found.age} / ${found.params.lifespan}${S('tooltipRounds')}</div>`,
+          `<div>${S('tooltipStatus')}: ${found.age > found.params.juvenilePeriod ? S('tooltipCanRepro') : S('tooltipJuvenile')}</div>`,
+          `<div>${S('tooltipHabitat')}: ${habitat}</div>`,
+          `<div>${S('tooltipMutation')}: ${found.params.mutation}%</div>`,
+          `<div class="border-t border-gray-600 mt-1 pt-1 text-yellow-200">${S('tooltipBaseParams')}</div>`,
+          `<div>${S('tooltipLifespan')}: ${found.params.lifespan}${S('tooltipRounds')}</div>`,
+          `<div>${S('tooltipJuvPeriod')}: ${found.params.juvenilePeriod}${S('tooltipRounds')}</div>`,
+          `<div class="border-t border-gray-600 mt-1 pt-1 text-green-200">${S('tooltipReproParams')}</div>`,
+          `<div>${S('tooltipPollinRange')}: ${found.params.pollinationRange}</div>`,
+          `<div>${S('tooltipSeedCount')}: ${found.params.seedCount}</div>`,
+          `<div>${S('tooltipSeedRange')}: ${found.params.seedRange}</div>`,
+          `<div>${S('tooltipSeedSurv')}: ${found.params.seedSurvival}%</div>`,
+          `<div class="border-t border-gray-600 mt-1 pt-1 text-red-200">${S('tooltipCompParams')}</div>`,
+          `<div>${S('tooltipIntraRange')}: ${found.params.intraCompRange}</div>`,
+          `<div>${S('tooltipIntraAbil')}: ${found.params.intraCompAbility}%</div>`,
+          `<div>${S('tooltipInterRange')}: ${found.params.interCompRange}</div>`,
+          `<div>${S('tooltipInterAbil')}: ${found.params.interCompAbility}%</div>`,
+          `<div class="border-t border-gray-600 mt-1 pt-1 text-yellow-300">${S('tooltipReproEff')}: ${compPercent}%</div>`
+        ].join('');
+      }
+
+      loop(now) {
+        const dt = Math.min((now - this.lastTime) / 1000, 0.15);
+        this.lastTime = now;
+        if (this.state === 'SIM' && !this.paused) {
+          this.roundTimer += dt;
+          if (this.roundTimer >= this.roundDuration) {
+            this.roundTimer = 0;
+            this.oneRound();
+          }
+        }
+        this.draw();
+        requestAnimationFrame((t) => this.loop(t));
+      }
+
+      draw() {
+        this.ctx.fillStyle = '#1e293b';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        const { scale, offsetX, offsetY } = this.mapTransform();
+        this.ctx.save();
+        this.ctx.translate(offsetX, offsetY);
+        this.ctx.scale(scale, scale);
+
+        for (let y = 0; y < this.mapH; y++) {
+          for (let x = 0; x < this.mapW; x++) {
+            this.ctx.fillStyle = TERRAIN_COLORS[this.map[y][x]] || TERRAIN_COLORS[0];
+            this.ctx.fillRect(x * UNIT_PIXEL, y * UNIT_PIXEL, UNIT_PIXEL, UNIT_PIXEL);
+          }
+        }
+
+        if (this.state === 'EDITOR') {
+          this.ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+          this.ctx.lineWidth = 0.8;
+          this.ctx.beginPath();
+          for (let x = 0; x <= this.mapW; x++) {
+            this.ctx.moveTo(x * UNIT_PIXEL, 0);
+            this.ctx.lineTo(x * UNIT_PIXEL, this.mapH * UNIT_PIXEL);
+          }
+          for (let y = 0; y <= this.mapH; y++) {
+            this.ctx.moveTo(0, y * UNIT_PIXEL);
+            this.ctx.lineTo(this.mapW * UNIT_PIXEL, y * UNIT_PIXEL);
+          }
+          this.ctx.stroke();
+        }
+
+        const drawRadius = Math.max(2.2, UNIT_PIXEL * 0.35);
+        this.plants.forEach(p => { if (p.alive) p.draw(this.ctx, drawRadius); });
+
+        this.ctx.restore();
+      }
+    }
+
+    window.addEventListener('load', () => { new IsleBloomSim(); });
+  </script>
+</body>
+</html>
