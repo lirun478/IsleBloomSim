@@ -11,12 +11,12 @@ Built as a university coursework project using **AI-assisted development (Arena.
 **DOI**: [10.5281/zenodo.19437084](https://doi.org/10.5281/zenodo.19437084)
 
 ## Features
-- 🗺️ **Island Editor**: Freely draw Water, Beach, Grass, and Forest terrains with brush tools  
-- 🌱 **Custom Plant Species**: Add unlimited species with full parameter control  
-- ⚙️ **Rich Ecological Parameters**: Lifespan, juvenile period, pollination range, seed dispersal, mutation rate, intra- and inter-specific competition  
-- 📊 **Real-time Simulation & Statistics**: Live population counters, individual plant tooltips, competition effects, and population change charts  
-- 🌍 **Bilingual Interface**: English + Chinese  
-- 📱 **Fully responsive** single-file HTML/JS web app — no installation required  
+- 🗺️ **Island Editor**: Freely draw Water, Beach, Grass, and Forest terrains with brush tools
+- 🌱 **Custom Plant Species**: Add unlimited species with full parameter control
+- ⚙️ **Rich Ecological Parameters**: Lifespan, juvenile period, pollination range, seed dispersal, mutation rate, intra- and inter-specific competition
+- 📊 **Real-time Simulation & Statistics**: Live population counters, individual plant tooltips, competition effects, and population change charts
+- 🌍 **Bilingual Interface**: English + Chinese
+- 📱 **Fully responsive** single-file HTML/JS web app — no installation required
 
 ## How to Use
 1. Open the **[Live Demo](https://lirun478.github.io/IsleBloom/)**
@@ -31,8 +31,8 @@ If you use IsleBloom in your research or teaching, please cite:
 **Runtian Li** (2026). *IsleBloom: Island Plant Competition Simulator* [Software]. Zenodo. https://doi.org/10.5281/zenodo.19437084
 
 ## Technical Stack
-- Pure HTML5 + Tailwind CSS + Chart.js + Vanilla JavaScript  
-- Grid-based spatial simulation with per-round life cycles, mutation, and density-dependent competition  
+- Pure HTML5 + Tailwind CSS + Chart.js + Vanilla JavaScript
+- Grid-based spatial simulation with per-round life cycles, mutation, and density-dependent competition
 - Runs entirely in the browser (no backend required)
 
 ## Author & Copyright
@@ -47,5 +47,5 @@ This project was independently created by me (**Runtian Li**) as part of a unive
 This project is licensed under the [MIT License](LICENSE).
 
 ## Acknowledgments
-- Inspired by classic ecological models in computational biology and bioinformatics  
+- Inspired by classic ecological models in computational biology and bioinformatics
 - Special thanks to Arena.ai for assisting the development process
